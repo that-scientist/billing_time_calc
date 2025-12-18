@@ -7,7 +7,7 @@ struct BillingTimeCalcApp: App {
             ContentView()
         }
         .windowStyle(.automatic)
-        .defaultSize(width: 600, height: 600)
+        .defaultSize(width: 900, height: 900)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }

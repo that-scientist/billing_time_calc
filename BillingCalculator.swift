@@ -41,11 +41,31 @@ struct CalculationResult {
     let startTime: Time
     let endTime: Time
     let warnings: [Warning]
+    let matchedTier: BillingTier?
+    let noteType: NoteType
     
     /// Warning types that may be generated during calculation
     enum Warning {
         case nearNextTier(currentCalls: Int, nextCalls: Int, minutesToNext: Int, suggestedEndTime: String)
         case startTimeNotOnHourOrHalfHour(suggestedStartTime: String)
+    }
+    
+    /// Represents a billing tier entry
+    struct BillingTier {
+        let calls: Int
+        let minMinutes: Int?
+        let maxMinutes: Int?
+        let actualMinutes: Int?
+        
+        var description: String {
+            if let actual = actualMinutes, let max = maxMinutes {
+                return "Max: \(max) min, Actual: \(actual) min"
+            } else if let min = minMinutes, let max = maxMinutes {
+                return "\(min)-\(max) min"
+            } else {
+                return "\(calls) calls"
+            }
+        }
     }
 }
 
@@ -68,7 +88,7 @@ struct BillingCalculator {
     // MARK: - Lookup Tables
     
     /// Progress Note lookup table: (maxMinutes, actualMinutes, calls)
-    private let progressNoteTable: [(max: Int, actual: Int, calls: Int)] = [
+    static let progressNoteTable: [(max: Int, actual: Int, calls: Int)] = [
         (30, 24, 3),
         (45, 36, 4),
         (60, 48, 5),
@@ -81,9 +101,9 @@ struct BillingCalculator {
         (165, 132, 12)
     ]
     
-    // Consult Note lookup table: (minMinutes, maxMinutes, calls)
-    // Based on "Time Spent with Patient" ranges
-    private let consultTable: [(min: Int, max: Int, calls: Int)] = [
+    /// Consult Note lookup table: (minMinutes, maxMinutes, calls)
+    /// Based on "Time Spent with Patient" ranges
+    static let consultTable: [(min: Int, max: Int, calls: Int)] = [
         (61, 71, 1),
         (72, 86, 2),
         (87, 101, 3),
@@ -94,6 +114,30 @@ struct BillingCalculator {
         (162, 176, 8),
         (177, 180, 9)
     ]
+    
+    /// Gets the billing table for a given note type
+    static func getBillingTable(for noteType: NoteType) -> [CalculationResult.BillingTier] {
+        switch noteType {
+        case .progressNote:
+            return progressNoteTable.map { entry in
+                CalculationResult.BillingTier(
+                    calls: entry.calls,
+                    minMinutes: nil,
+                    maxMinutes: entry.max,
+                    actualMinutes: entry.actual
+                )
+            }
+        case .consult:
+            return consultTable.map { entry in
+                CalculationResult.BillingTier(
+                    calls: entry.calls,
+                    minMinutes: entry.min,
+                    maxMinutes: entry.max,
+                    actualMinutes: nil
+                )
+            }
+        }
+    }
     
     /// Errors that can occur during billing calculation
     enum CalculationError: LocalizedError {
@@ -163,7 +207,7 @@ struct BillingCalculator {
         }
         
         // Find the appropriate number of calls based on note type
-        let calls = findCalls(for: duration, noteType: noteType)
+        let (calls, matchedTier) = findCallsWithTier(for: duration, noteType: noteType)
         
         // For consult notes, verify the duration matches a table entry exactly
         if noteType == .consult && calls == 0 {
@@ -190,7 +234,9 @@ struct BillingCalculator {
             duration: duration,
             startTime: startTime,
             endTime: endTime,
-            warnings: warnings
+            warnings: warnings,
+            matchedTier: matchedTier,
+            noteType: noteType
         ))
     }
     
@@ -329,29 +375,54 @@ struct BillingCalculator {
     }
     
     private func findCalls(for duration: Int, noteType: NoteType) -> Int {
+        let (calls, _) = findCallsWithTier(for: duration, noteType: noteType)
+        return calls
+    }
+    
+    private func findCallsWithTier(for duration: Int, noteType: NoteType) -> (Int, CalculationResult.BillingTier?) {
         switch noteType {
         case .progressNote:
             // Find the first entry where duration (actual face-to-face time) <= entry.actual
             // The actual time is what the doctor records, and max is what can be billed (actual * 1.25)
             // Table is ordered by actual time ascending, so first match is the correct tier
-            for entry in progressNoteTable {
+            for entry in Self.progressNoteTable {
                 if duration <= entry.actual {
-                    return entry.calls
+                    let tier = CalculationResult.BillingTier(
+                        calls: entry.calls,
+                        minMinutes: nil,
+                        maxMinutes: entry.max,
+                        actualMinutes: entry.actual
+                    )
+                    return (entry.calls, tier)
                 }
             }
             // If duration exceeds all entries, return the maximum
-            return progressNoteTable.last?.calls ?? 12
+            if let lastEntry = Self.progressNoteTable.last {
+                let tier = CalculationResult.BillingTier(
+                    calls: lastEntry.calls,
+                    minMinutes: nil,
+                    maxMinutes: lastEntry.max,
+                    actualMinutes: lastEntry.actual
+                )
+                return (lastEntry.calls, tier)
+            }
+            return (12, nil)
             
         case .consult:
             // Find the entry where duration falls within the min-max range (exact table match only)
-            for entry in consultTable {
+            for entry in Self.consultTable {
                 if duration >= entry.min && duration <= entry.max {
-                    return entry.calls
+                    let tier = CalculationResult.BillingTier(
+                        calls: entry.calls,
+                        minMinutes: entry.min,
+                        maxMinutes: entry.max,
+                        actualMinutes: nil
+                    )
+                    return (entry.calls, tier)
                 }
             }
             // If duration doesn't match any table entry, return 0 (will be caught as error)
-            // Note: This should not happen if validation is working correctly
-            return 0
+            return (0, nil)
         }
     }
     
@@ -360,7 +431,7 @@ struct BillingCalculator {
         case .progressNote:
             // Find the next tier with MORE calls than current
             // For progress notes, we need to find the first entry with calls > currentCalls
-            for entry in progressNoteTable {
+            for entry in Self.progressNoteTable {
                 if entry.calls > currentCalls {
                     return (max: entry.actual, calls: entry.calls)  // Use actual time, not max
                 }
@@ -371,7 +442,7 @@ struct BillingCalculator {
             // Find the next tier with MORE calls than current
             // For consult notes, we need to find the first entry with calls > currentCalls
             // Return the min value (threshold to reach next tier)
-            for entry in consultTable {
+            for entry in Self.consultTable {
                 if entry.calls > currentCalls {
                     return (max: entry.min, calls: entry.calls)  // Use min as the threshold
                 }

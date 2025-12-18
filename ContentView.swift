@@ -96,46 +96,21 @@ struct ContentView: View {
             .controlSize(.large)
             
             if !result.isEmpty {
-                VStack(spacing: 10) {
-                    Divider()
-                        .padding(.vertical)
-                    
-                    HStack {
-                        Text("Result:")
-                            .font(.headline)
-                        Spacer()
-                        Button(action: copyResultNumber) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.on.doc")
-                                Text("Copy Number")
-                            }
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    
-                    Text(result)
-                        .font(.system(.title2, design: .monospaced))
-                        .foregroundColor(.blue)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(8)
-                    
-                    // Suggested time range (if available)
-                    if !suggestedTimeRange.isEmpty {
-                        VStack(spacing: 8) {
+                ScrollView {
+                    VStack(spacing: 15) {
+                        Divider()
+                            .padding(.vertical)
+                        
+                        // Result Section
+                        VStack(spacing: 10) {
                             HStack {
-                                Text("Suggested Time Range:")
+                                Text("Result:")
                                     .font(.headline)
                                 Spacer()
-                                Button(action: copySuggestedTimeRange) {
+                                Button(action: copyResultNumber) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "doc.on.doc")
-                                        Text("Copy Range")
+                                        Text("Copy Number")
                                     }
                                     .font(.caption)
                                     .padding(.horizontal, 8)
@@ -145,23 +120,102 @@ struct ContentView: View {
                                 .controlSize(.small)
                             }
                             
-                            Text(suggestedTimeRange)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.green)
+                            Text(result)
+                                .font(.system(.title2, design: .monospaced))
+                                .foregroundColor(.blue)
                                 .padding()
                                 .frame(maxWidth: .infinity)
-                                .background(Color.green.opacity(0.1))
+                                .background(Color.blue.opacity(0.1))
                                 .cornerRadius(8)
+                            
+                            // Calculation Details
+                            if let calcResult = currentCalculationResult {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Calculation Details:")
+                                        .font(.headline)
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("Duration:")
+                                                .fontWeight(.medium)
+                                            Spacer()
+                                            Text("\(calcResult.duration) minutes")
+                                                .font(.system(.body, design: .monospaced))
+                                        }
+                                        
+                                        HStack {
+                                            Text("Time Range:")
+                                                .fontWeight(.medium)
+                                            Spacer()
+                                            Text("\(calcResult.startTime.formattedString) - \(calcResult.endTime.formattedString)")
+                                                .font(.system(.body, design: .monospaced))
+                                        }
+                                        
+                                        if let matchedTier = calcResult.matchedTier {
+                                            HStack {
+                                                Text("Matched Tier:")
+                                                    .fontWeight(.medium)
+                                                Spacer()
+                                                Text(matchedTier.description)
+                                                    .font(.system(.body, design: .monospaced))
+                                            }
+                                        }
+                                    }
+                                    .padding()
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(8)
+                                }
+                            }
+                            
+                            // Suggested time range (if available)
+                            if !suggestedTimeRange.isEmpty {
+                                VStack(spacing: 8) {
+                                    HStack {
+                                        Text("Suggested Time Range:")
+                                            .font(.headline)
+                                        Spacer()
+                                        Button(action: copySuggestedTimeRange) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "doc.on.doc")
+                                                Text("Copy Range")
+                                            }
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                    
+                                    Text(suggestedTimeRange)
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundColor(.green)
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.green.opacity(0.1))
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                        
+                        // Billing Table Section
+                        if let calcResult = currentCalculationResult {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Billing Table (\(selectedNoteType == .progressNote ? "Progress Note" : "Consult")):")
+                                    .font(.headline)
+                                
+                                billingTableView(for: calcResult.noteType, matchedTier: calcResult.matchedTier)
+                            }
                         }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
             
             Spacer()
         }
         .padding()
-        .frame(minWidth: 500, minHeight: 550)
+        .frame(minWidth: 850, minHeight: 850)
         .alert("Near Next Tier", isPresented: $showingNearTierAlert) {
             Button("Amend Time") {
                 if case .nearNextTier(_, _, _, let suggestedEndTime) = nearTierWarning {
@@ -328,6 +382,82 @@ struct ContentView: View {
             // After recalculation, update suggestedTimeRange to match the current input
             self.suggestedTimeRange = self.timeInput
         }
+    }
+    
+    // MARK: - Billing Table View
+    
+    @ViewBuilder
+    private func billingTableView(for noteType: NoteType, matchedTier: CalculationResult.BillingTier?) -> some View {
+        let table = BillingCalculator.getBillingTable(for: noteType)
+        
+        VStack(spacing: 0) {
+            // Table Header
+            HStack(spacing: 0) {
+                if noteType == .progressNote {
+                    Text("Max Minutes")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .fontWeight(.semibold)
+                        .padding(8)
+                    Text("Actual Minutes")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .fontWeight(.semibold)
+                        .padding(8)
+                } else {
+                    Text("Min Minutes")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .fontWeight(.semibold)
+                        .padding(8)
+                    Text("Max Minutes")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .fontWeight(.semibold)
+                        .padding(8)
+                }
+                Text("Calls")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .fontWeight(.semibold)
+                    .padding(8)
+            }
+            .background(Color.blue.opacity(0.2))
+            
+            // Table Rows
+            ForEach(Array(table.enumerated()), id: \.offset) { index, tier in
+                let isMatched = matchedTier?.calls == tier.calls
+                
+                HStack(spacing: 0) {
+                    if noteType == .progressNote {
+                        Text("\(tier.maxMinutes ?? 0)")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(8)
+                        Text("\(tier.actualMinutes ?? 0)")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(8)
+                    } else {
+                        Text("\(tier.minMinutes ?? 0)")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(8)
+                        Text("\(tier.maxMinutes ?? 0)")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(8)
+                    }
+                    Text("\(tier.calls)")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .fontWeight(isMatched ? .bold : .regular)
+                        .padding(8)
+                }
+                .background(isMatched ? Color.green.opacity(0.3) : (index % 2 == 0 ? Color.gray.opacity(0.05) : Color.clear))
+                .overlay(
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundColor(Color.gray.opacity(0.2)),
+                    alignment: .bottom
+                )
+            }
+        }
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 
