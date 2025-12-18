@@ -2,6 +2,19 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+    // MARK: - Constants
+    
+    /// Delay before showing start time alert (allows state to update)
+    private static let startTimeAlertDelay: TimeInterval = 0.01
+    
+    /// Delay before showing near tier alert (allows state to update)
+    private static let nearTierAlertDelay: TimeInterval = 0.1
+    
+    /// Delay before recalculating after amending time
+    private static let recalculateDelay: TimeInterval = 0.1
+    
+    // MARK: - State
+    
     @State private var timeInput: String = ""
     @State private var result: String = ""
     @State private var errorMessage: String = ""
@@ -219,11 +232,10 @@ struct ContentView: View {
                 self.startTimeWarning = startTimeWarning
                 // Extract suggested time range
                 if case .startTimeNotOnHourOrHalfHour(let suggestedStartTime) = startTimeWarning {
-                    let endTimeString = String(format: "%02d:%02d", calcResult.endTime.hours, calcResult.endTime.minutes)
-                    self.suggestedTimeRange = "\(suggestedStartTime)-\(endTimeString)"
+                    self.suggestedTimeRange = "\(suggestedStartTime)-\(calcResult.endTime.formattedString)"
                 }
                 // Use a small delay to ensure state is fully updated
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.startTimeAlertDelay) {
                     self.showingStartTimeAlert = true
                 }
                 return
@@ -238,11 +250,10 @@ struct ContentView: View {
                 self.nearTierWarning = nearTierWarning
                 // Extract suggested time range
                 if case .nearNextTier(_, _, _, let suggestedEndTime) = nearTierWarning {
-                    let startTimeString = String(format: "%02d:%02d", calcResult.startTime.hours, calcResult.startTime.minutes)
-                    self.suggestedTimeRange = "\(startTimeString)-\(suggestedEndTime)"
+                    self.suggestedTimeRange = "\(calcResult.startTime.formattedString)-\(suggestedEndTime)"
                 }
                 // Use a small delay to ensure state is fully updated before showing alert
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.nearTierAlertDelay) {
                     self.showingNearTierAlert = true
                 }
                 return
@@ -287,8 +298,7 @@ struct ContentView: View {
     
     private func amendTimeForNextTier(suggestedEndTime: String) {
         guard let calcResult = currentCalculationResult else { return }
-        let startTimeString = String(format: "%02d:%02d", calcResult.startTime.hours, calcResult.startTime.minutes)
-        let amendedRange = "\(startTimeString)-\(suggestedEndTime)"
+        let amendedRange = "\(calcResult.startTime.formattedString)-\(suggestedEndTime)"
         timeInput = amendedRange
         
         // Set the suggested time range to the amended range and preserve it
@@ -296,7 +306,7 @@ struct ContentView: View {
         preserveSuggestedRange = true
         
         // Recalculate with amended time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.recalculateDelay) {
             calculateCalls()
             // After recalculation, update suggestedTimeRange to match the current input
             self.suggestedTimeRange = self.timeInput
@@ -305,8 +315,7 @@ struct ContentView: View {
     
     private func amendStartTime(suggestedStartTime: String) {
         guard let calcResult = currentCalculationResult else { return }
-        let endTimeString = String(format: "%02d:%02d", calcResult.endTime.hours, calcResult.endTime.minutes)
-        let amendedRange = "\(suggestedStartTime)-\(endTimeString)"
+        let amendedRange = "\(suggestedStartTime)-\(calcResult.endTime.formattedString)"
         timeInput = amendedRange
         
         // Set the suggested time range to the amended range and preserve it
@@ -314,7 +323,7 @@ struct ContentView: View {
         preserveSuggestedRange = true
         
         // Recalculate with amended time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.recalculateDelay) {
             calculateCalls()
             // After recalculation, update suggestedTimeRange to match the current input
             self.suggestedTimeRange = self.timeInput

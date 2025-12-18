@@ -1,25 +1,73 @@
 import Foundation
 
-enum NoteType {
+/// Represents the type of medical note being billed
+enum NoteType: CaseIterable, Identifiable {
     case progressNote
     case consult
+    
+    var id: String {
+        switch self {
+        case .progressNote: return "progressNote"
+        case .consult: return "consult"
+        }
+    }
 }
 
+/// Represents a time of day with hours and minutes
+struct Time: Equatable {
+    let hours: Int
+    let minutes: Int
+    
+    /// Converts time to total minutes since midnight
+    var totalMinutes: Int {
+        hours * 60 + minutes
+    }
+    
+    /// Formats time as HH:MM string
+    var formattedString: String {
+        String(format: "%02d:%02d", hours, minutes)
+    }
+    
+    /// Creates a Time from total minutes since midnight
+    static func from(minutes: Int) -> Time {
+        Time(hours: minutes / 60, minutes: minutes % 60)
+    }
+}
+
+/// Result of a billing calculation
 struct CalculationResult {
     let calls: Int
     let duration: Int
-    let startTime: (hours: Int, minutes: Int)
-    let endTime: (hours: Int, minutes: Int)
+    let startTime: Time
+    let endTime: Time
     let warnings: [Warning]
     
+    /// Warning types that may be generated during calculation
     enum Warning {
         case nearNextTier(currentCalls: Int, nextCalls: Int, minutesToNext: Int, suggestedEndTime: String)
         case startTimeNotOnHourOrHalfHour(suggestedStartTime: String)
     }
 }
 
+/// Calculates billing calls based on time ranges and note types
 struct BillingCalculator {
-    // Progress Note lookup table: (maxMinutes, actualMinutes, calls)
+    // MARK: - Constants
+    
+    /// Warning window in minutes (user will be warned if within this many minutes of next tier)
+    private static let warningWindowMinutes = 10
+    
+    /// Minimum duration for consult notes (minutes)
+    private static let consultMinimumDuration = 61
+    
+    /// Maximum duration for consult notes (minutes)
+    private static let consultMaximumDuration = 180
+    
+    /// Maximum duration for progress notes (minutes)
+    private static let progressNoteMaximumDuration = 165
+    
+    // MARK: - Lookup Tables
+    
+    /// Progress Note lookup table: (maxMinutes, actualMinutes, calls)
     private let progressNoteTable: [(max: Int, actual: Int, calls: Int)] = [
         (30, 24, 3),
         (45, 36, 4),
@@ -47,6 +95,7 @@ struct BillingCalculator {
         (177, 180, 9)
     ]
     
+    /// Errors that can occur during billing calculation
     enum CalculationError: LocalizedError {
         case invalidFormat
         case invalidTime
@@ -70,6 +119,14 @@ struct BillingCalculator {
         }
     }
     
+    // MARK: - Public Methods
+    
+    /// Calculates billing calls from a time range string
+    /// - Parameters:
+    ///   - input: Time range in format "HH:MM-HH:MM" or "HHMM-HHMM" (24h) or "H:MM AM/PM-H:MM AM/PM" (12h)
+    ///   - noteType: Type of note (Progress Note or Consult)
+    /// - Returns: Result containing calculation result or error
+    
     func calculate(from input: String, noteType: NoteType) -> Result<CalculationResult, CalculationError> {
         // Parse the input
         let components = input.trimmingCharacters(in: .whitespaces).components(separatedBy: "-")
@@ -92,13 +149,13 @@ struct BillingCalculator {
             return .failure(.startAfterEnd)
         }
         
-        // Check minimum duration for consult notes (must be at least 61 minutes to match table)
-        if noteType == .consult && duration < 61 {
+        // Check minimum duration for consult notes
+        if noteType == .consult && duration < Self.consultMinimumDuration {
             return .failure(.durationTooShort)
         }
         
         // Check max duration based on note type
-        let maxDuration = noteType == .consult ? 180 : 165
+        let maxDuration = noteType == .consult ? Self.consultMaximumDuration : Self.progressNoteMaximumDuration
         guard duration <= maxDuration else {
             let error = CalculationError.durationTooLong
             // Note: We can't customize the error message here easily, but the validation works
@@ -116,7 +173,7 @@ struct BillingCalculator {
         // Check for warnings
         var warnings: [CalculationResult.Warning] = []
         
-        // Check if duration is within 10 minutes of next tier (for both note types)
+        // Check if duration is within warning window of next tier (for both note types)
         if let nextTierWarning = checkNearNextTier(duration: duration, currentCalls: calls, startTime: startTime, noteType: noteType) {
             warnings.append(nextTierWarning)
         }
@@ -137,7 +194,12 @@ struct BillingCalculator {
         ))
     }
     
-    private func parseTime(_ timeString: String) -> (hours: Int, minutes: Int)? {
+    // MARK: - Private Methods
+    
+    /// Parses a time string into hours and minutes
+    /// - Parameter timeString: Time string in various formats (12h or 24h, with or without colons)
+    /// - Returns: Time struct or nil if parsing fails
+    private func parseTime(_ timeString: String) -> Time? {
         let trimmed = timeString.trimmingCharacters(in: .whitespaces).uppercased()
         
         // Check for 12-hour format (contains AM or PM, or A.M./P.M.)
@@ -224,7 +286,7 @@ struct BillingCalculator {
                 // 12 PM stays as 12
             }
             
-            return (hours: hours24, minutes: minutes)
+            return Time(hours: hours24, minutes: minutes)
         } else {
             // Parse 24-hour format (handle both "09:00" and "0900" formats)
             let components: [String]
@@ -257,14 +319,13 @@ struct BillingCalculator {
                 return nil
             }
             
-            return (hours: hours, minutes: minutes)
+            return Time(hours: hours, minutes: minutes)
         }
     }
     
-    private func calculateDuration(start: (hours: Int, minutes: Int), end: (hours: Int, minutes: Int)) -> Int {
-        let startMinutes = start.hours * 60 + start.minutes
-        let endMinutes = end.hours * 60 + end.minutes
-        return endMinutes - startMinutes
+    /// Calculates duration in minutes between two times
+    private func calculateDuration(start: Time, end: Time) -> Int {
+        end.totalMinutes - start.totalMinutes
     }
     
     private func findCalls(for duration: Int, noteType: NoteType) -> Int {
@@ -319,7 +380,8 @@ struct BillingCalculator {
         }
     }
     
-    private func checkNearNextTier(duration: Int, currentCalls: Int, startTime: (hours: Int, minutes: Int), noteType: NoteType) -> CalculationResult.Warning? {
+    /// Checks if duration is within warning window of next tier
+    private func checkNearNextTier(duration: Int, currentCalls: Int, startTime: Time, noteType: NoteType) -> CalculationResult.Warning? {
         guard let nextTier = findNextTier(currentCalls: currentCalls, noteType: noteType) else {
             return nil // Already at max tier
         }
@@ -330,7 +392,6 @@ struct BillingCalculator {
         case .progressNote:
             // For progress notes, use the next tier's actual time from findNextTier
             // The nextTier.max contains the actual time (face-to-face time needed)
-            // We need to check if we're close to reaching the next tier's actual time threshold
             targetMinutes = nextTier.max
             minutesToNext = targetMinutes - duration
         case .consult:
@@ -339,41 +400,36 @@ struct BillingCalculator {
             minutesToNext = targetMinutes - duration
         }
         
-        if minutesToNext > 0 && minutesToNext <= 10 {
+        if minutesToNext > 0 && minutesToNext <= Self.warningWindowMinutes {
             // Calculate suggested end time to reach next tier
-            let suggestedEndMinutes = startTime.hours * 60 + startTime.minutes + targetMinutes
-            let suggestedHours = suggestedEndMinutes / 60
-            let suggestedMins = suggestedEndMinutes % 60
-            let suggestedEndTime = String(format: "%02d:%02d", suggestedHours, suggestedMins)
+            let suggestedEndTime = Time.from(minutes: startTime.totalMinutes + targetMinutes)
             
             return .nearNextTier(
                 currentCalls: currentCalls,
                 nextCalls: nextTier.calls,
                 minutesToNext: minutesToNext,
-                suggestedEndTime: suggestedEndTime
+                suggestedEndTime: suggestedEndTime.formattedString
             )
         }
         return nil
     }
     
-    private func checkStartTimeAlignment(startTime: (hours: Int, minutes: Int)) -> CalculationResult.Warning? {
+    /// Checks if start time is aligned to hour or half-hour boundaries
+    private func checkStartTimeAlignment(startTime: Time) -> CalculationResult.Warning? {
         // Check if start time is on hour (minutes == 0) or half-hour (minutes == 30)
         if startTime.minutes != 0 && startTime.minutes != 30 {
             // Suggest rounding to nearest hour or half-hour
-            let suggestedMinutes: Int
+            let suggestedTime: Time
             if startTime.minutes < 15 {
-                suggestedMinutes = 0
+                suggestedTime = Time(hours: startTime.hours, minutes: 0)
             } else if startTime.minutes < 45 {
-                suggestedMinutes = 30
+                suggestedTime = Time(hours: startTime.hours, minutes: 30)
             } else {
-                suggestedMinutes = 0
                 // If minutes >= 45, round up to next hour
                 let suggestedHours = (startTime.hours + 1) % 24
-                let suggestedStartTime = String(format: "%02d:%02d", suggestedHours, 0)
-                return .startTimeNotOnHourOrHalfHour(suggestedStartTime: suggestedStartTime)
+                suggestedTime = Time(hours: suggestedHours, minutes: 0)
             }
-            let suggestedStartTime = String(format: "%02d:%02d", startTime.hours, suggestedMinutes)
-            return .startTimeNotOnHourOrHalfHour(suggestedStartTime: suggestedStartTime)
+            return .startTimeNotOnHourOrHalfHour(suggestedStartTime: suggestedTime.formattedString)
         }
         return nil
     }
