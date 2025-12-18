@@ -382,11 +382,13 @@ struct BillingCalculator {
     private func findCallsWithTier(for duration: Int, noteType: NoteType) -> (Int, CalculationResult.BillingTier?) {
         switch noteType {
         case .progressNote:
-            // Find the first entry where duration (actual face-to-face time) <= entry.actual
+            // Find the tier where duration falls within the range
+            // For progress notes, we need to find the tier where:
+            // previous_tier.actual < duration <= current_tier.actual
             // The actual time is what the doctor records, and max is what can be billed (actual * 1.25)
-            // Table is ordered by actual time ascending, so first match is the correct tier
+            var previousActual = 0
             for entry in Self.progressNoteTable {
-                if duration <= entry.actual {
+                if previousActual < duration && duration <= entry.actual {
                     let tier = CalculationResult.BillingTier(
                         calls: entry.calls,
                         minMinutes: nil,
@@ -395,16 +397,19 @@ struct BillingCalculator {
                     )
                     return (entry.calls, tier)
                 }
+                previousActual = entry.actual
             }
             // If duration exceeds all entries, return the maximum
             if let lastEntry = Self.progressNoteTable.last {
-                let tier = CalculationResult.BillingTier(
-                    calls: lastEntry.calls,
-                    minMinutes: nil,
-                    maxMinutes: lastEntry.max,
-                    actualMinutes: lastEntry.actual
-                )
-                return (lastEntry.calls, tier)
+                if duration > lastEntry.actual {
+                    let tier = CalculationResult.BillingTier(
+                        calls: lastEntry.calls,
+                        minMinutes: nil,
+                        maxMinutes: lastEntry.max,
+                        actualMinutes: lastEntry.actual
+                    )
+                    return (lastEntry.calls, tier)
+                }
             }
             return (12, nil)
             
