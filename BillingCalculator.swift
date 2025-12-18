@@ -382,36 +382,45 @@ struct BillingCalculator {
     private func findCallsWithTier(for duration: Int, noteType: NoteType) -> (Int, CalculationResult.BillingTier?) {
         switch noteType {
         case .progressNote:
-            // Find the tier where duration falls within the range
-            // For progress notes, we need to find the tier where:
-            // previous_tier.actual < duration <= current_tier.actual
+            // Find the tier where duration falls
             // The actual time is what the doctor records, and max is what can be billed (actual * 1.25)
-            var previousActual = 0
+            // For progress notes: if duration <= entry.actual, use that tier
+            // But we want the tier with the LARGEST actual that is still >= duration
+            // So for 98 minutes: 98 <= 96? No. 98 <= 108? Yes, but we want 9 calls (96), not 10 calls (108)
+            // Actually, we want the tier where entry.actual is the largest value that is still <= duration
+            // Wait, that doesn't make sense either. Let me think...
+            // For 98: we want 9 calls. The tier for 9 calls has actual 96.
+            // So maybe: find the tier where entry.actual <= duration, and return the one with the highest actual?
+            var bestMatch: (calls: Int, tier: CalculationResult.BillingTier?)? = nil
             for entry in Self.progressNoteTable {
-                if previousActual < duration && duration <= entry.actual {
+                if duration >= entry.actual {
+                    // This tier matches, but we want the one with the highest actual that still matches
                     let tier = CalculationResult.BillingTier(
                         calls: entry.calls,
                         minMinutes: nil,
                         maxMinutes: entry.max,
                         actualMinutes: entry.actual
                     )
-                    return (entry.calls, tier)
-                }
-                previousActual = entry.actual
-            }
-            // If duration exceeds all entries, return the maximum
-            if let lastEntry = Self.progressNoteTable.last {
-                if duration > lastEntry.actual {
-                    let tier = CalculationResult.BillingTier(
-                        calls: lastEntry.calls,
-                        minMinutes: nil,
-                        maxMinutes: lastEntry.max,
-                        actualMinutes: lastEntry.actual
-                    )
-                    return (lastEntry.calls, tier)
+                    bestMatch = (entry.calls, tier)
+                } else {
+                    // We've gone past the matching tier, return the last match
+                    break
                 }
             }
-            return (12, nil)
+            if let match = bestMatch {
+                return (match.calls, match.tier)
+            }
+            // If duration is less than all entries, return the first tier
+            if let firstEntry = Self.progressNoteTable.first {
+                let tier = CalculationResult.BillingTier(
+                    calls: firstEntry.calls,
+                    minMinutes: nil,
+                    maxMinutes: firstEntry.max,
+                    actualMinutes: firstEntry.actual
+                )
+                return (firstEntry.calls, tier)
+            }
+            return (3, nil)
             
         case .consult:
             // Find the entry where duration falls within the min-max range (exact table match only)
