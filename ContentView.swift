@@ -215,7 +215,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
-        .frame(minWidth: 850, minHeight: 850)
+        .frame(minWidth: 850, idealWidth: 900, minHeight: 850, idealHeight: 900)
         .alert("Near Next Tier", isPresented: $showingNearTierAlert) {
             Button("Amend Time") {
                 if case .nearNextTier(_, _, _, let suggestedEndTime) = nearTierWarning {
