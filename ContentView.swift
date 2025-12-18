@@ -394,11 +394,11 @@ struct ContentView: View {
             // Table Header
             HStack(spacing: 0) {
                 if noteType == .progressNote {
-                    Text("Max Minutes")
+                    Text("With Documentation")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .fontWeight(.semibold)
                         .padding(8)
-                    Text("Actual Minutes")
+                    Text("Face to Face")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .fontWeight(.semibold)
                         .padding(8)
@@ -412,7 +412,7 @@ struct ContentView: View {
                         .fontWeight(.semibold)
                         .padding(8)
                 }
-                Text("Calls")
+                Text("Calls or Multiples")
                     .frame(maxWidth: .infinity, alignment: .center)
                     .fontWeight(.semibold)
                     .padding(8)
