@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# Version file (build-specific)
+.version
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcuserstate
+*.xcuserdatad
+
