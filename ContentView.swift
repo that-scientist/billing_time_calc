@@ -223,6 +223,8 @@ struct ContentView: View {
                 }
             }
             Button("Keep Current", role: .cancel) {
+                // Clear suggested time range when user declines the amendment
+                suggestedTimeRange = ""
                 showResult()
             }
         } message: {
@@ -239,6 +241,8 @@ struct ContentView: View {
                 }
             }
             Button("Keep Current", role: .cancel) {
+                // Clear suggested time range when user declines the amendment
+                suggestedTimeRange = ""
                 showResult()
             }
         } message: {
