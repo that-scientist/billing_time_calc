@@ -7,6 +7,11 @@ DerivedData/
 # Version file (build-specific)
 .version
 
+# Distribution files
+*.dmg
+*.zip
+package/
+
 # macOS
 .DS_Store
 
