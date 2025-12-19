@@ -24,6 +24,8 @@
 	<string>Copyright © 2024. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>CFBundleIconFile</key>
+	<string>PhysicianTime_icon_tile</string>
 </dict>
 </plist>
 
