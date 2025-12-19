@@ -15,11 +15,13 @@ targets:
           - "*.yml"
           - "build"
           - ".git"
+    resources:
+      - path: Assets
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.example.BillingTimeCalc
       INFOPLIST_FILE: Info.plist
       SWIFT_VERSION: "5.9"
       MACOSX_DEPLOYMENT_TARGET: "13.0"
       MARKETING_VERSION: "1.0"
-      CURRENT_PROJECT_VERSION: "66"
+      CURRENT_PROJECT_VERSION: "68"
 
