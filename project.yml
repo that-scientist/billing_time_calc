@@ -17,11 +17,13 @@ targets:
           - ".git"
     resources:
       - path: Assets
+      - path: Assets.xcassets
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.example.BillingTimeCalc
       INFOPLIST_FILE: Info.plist
       SWIFT_VERSION: "5.9"
       MACOSX_DEPLOYMENT_TARGET: "13.0"
       MARKETING_VERSION: "1.0"
-      CURRENT_PROJECT_VERSION: "69"
+      CURRENT_PROJECT_VERSION: "70"
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
