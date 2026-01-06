@@ -14,7 +14,7 @@ struct ContentView: View {
     private static let recalculateDelay: TimeInterval = 0.1
     
     // MARK: - State
-    
+
     @State private var timeInput: String = ""
     @State private var result: String = ""
     @State private var errorMessage: String = ""
@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var selectedNoteType: NoteType = .progressNote
     @State private var suggestedTimeRange: String = ""
     @State private var preserveSuggestedRange: Bool = false
+    @State private var timerStartTime: Date?
+    @State private var isTimerRunning: Bool = false
+    @State private var startTimeWarningShown: Bool = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -70,16 +73,35 @@ struct ContentView: View {
                 
                 // Time Input
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Enter time range (24h or 12h format):")
-                        .font(.headline)
-                    
-                           TextField("e.g., 09:00-10:30, 09:00 to 10:30, or 9:00 AM to 10:30 AM", text: $timeInput)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
-                        .onSubmit {
-                            calculateCalls()
+                    HStack {
+                        Text("Enter time range (24h or 12h format):")
+                            .font(.headline)
+                        Spacer()
+                        Text("Or use timer:")
+                            .font(.headline)
+                    }
+
+                    HStack(spacing: 10) {
+                        TextField("e.g., 09:00-10:30, 09:00 to 10:30, or 9:00 AM to 10:30 AM", text: $timeInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .onSubmit {
+                                calculateCalls()
+                            }
+                            .disabled(isTimerRunning)
+
+                        Button(action: toggleTimer) {
+                            HStack(spacing: 6) {
+                                Image(systemName: isTimerRunning ? "stop.circle.fill" : "play.circle.fill")
+                                Text(isTimerRunning ? "Stop" : "Start")
+                            }
+                            .frame(width: 80)
                         }
-                    
+                        .buttonStyle(.borderedProminent)
+                        .tint(isTimerRunning ? .red : .green)
+                        .controlSize(.large)
+                    }
+
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
                             .foregroundColor(.red)
@@ -88,12 +110,13 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal)
-            
+
             Button("Calculate Calls") {
                 calculateCalls()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(isTimerRunning)
             
             if !result.isEmpty {
                 ScrollView {
@@ -280,6 +303,7 @@ struct ContentView: View {
         // Only clear suggestedTimeRange if we're not preserving it (i.e., not after an amend)
         if !preserveSuggestedRange {
             suggestedTimeRange = ""
+            startTimeWarningShown = false  // Reset for new calculation
         }
         preserveSuggestedRange = false
         
@@ -296,12 +320,13 @@ struct ContentView: View {
             // Show result first (so it's visible even when warnings are present)
             showResult()
             
-            // Find start time warning
-            if let startTimeWarning = warningsToShow.first(where: {
+            // Find start time warning (only show if not already shown in this session)
+            if !startTimeWarningShown, let startTimeWarning = warningsToShow.first(where: {
                 if case .startTimeNotOnHourOrHalfHour = $0 { return true }
                 return false
             }) {
                 self.startTimeWarning = startTimeWarning
+                self.startTimeWarningShown = true  // Mark as shown
                 // Extract suggested time range
                 if case .startTimeNotOnHourOrHalfHour(let suggestedStartTime) = startTimeWarning {
                     self.suggestedTimeRange = "\(suggestedStartTime)-\(calcResult.endTime.formattedString)"
@@ -378,6 +403,7 @@ struct ContentView: View {
         showingStartTimeAlert = false
         suggestedTimeRange = ""
         preserveSuggestedRange = false
+        startTimeWarningShown = false
     }
     
     private func copyFullResult() {
@@ -443,7 +469,42 @@ struct ContentView: View {
             self.suggestedTimeRange = self.timeInput
         }
     }
-    
+
+    private func toggleTimer() {
+        if isTimerRunning {
+            // Stop timer - capture end time and calculate
+            guard let startTime = timerStartTime else { return }
+            let endTime = Date()
+
+            // Format times as HH:MM
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+
+            let startString = formatter.string(from: startTime)
+            let endString = formatter.string(from: endTime)
+
+            timeInput = "\(startString)-\(endString)"
+
+            // Reset timer state
+            isTimerRunning = false
+            timerStartTime = nil
+
+            // Automatically calculate
+            calculateCalls()
+        } else {
+            // Start timer - capture start time
+            timerStartTime = Date()
+            isTimerRunning = true
+
+            // Clear previous results
+            errorMessage = ""
+            result = ""
+            currentCalculationResult = nil
+            suggestedTimeRange = ""
+            startTimeWarningShown = false
+        }
+    }
+
     // MARK: - Billing Table View
     
     @ViewBuilder
