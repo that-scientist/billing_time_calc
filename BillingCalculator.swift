@@ -150,7 +150,7 @@ struct BillingCalculator {
         var errorDescription: String? {
             switch self {
             case .invalidFormat:
-                return "Invalid format. Use HH:MM-HH:MM, HHMM-HHMM, or 12h format (e.g., 09:00-10:30, 0900-1030, 9:00 AM-10:30 AM)"
+                return "Invalid format. Use HH:MM-HH:MM or HH:MM to HH:MM, or 12h format (e.g., 09:00-10:30, 09:00 to 10:30, 9:00 AM to 10:30 AM)"
             case .invalidTime:
                 return "Invalid time values. Use 24h format (00:00-23:59 or 0000-2359) or 12h format (1:00 AM-11:59 PM, with or without colons)"
             case .startAfterEnd:
@@ -167,19 +167,30 @@ struct BillingCalculator {
     
     /// Calculates billing calls from a time range string
     /// - Parameters:
-    ///   - input: Time range in format "HH:MM-HH:MM" or "HHMM-HHMM" (24h) or "H:MM AM/PM-H:MM AM/PM" (12h)
+    ///   - input: Time range in format "HH:MM-HH:MM", "HH:MM to HH:MM", or 12h format with AM/PM (e.g., "9:00 AM to 10:30 AM")
     ///   - noteType: Type of note (Progress Note or Consult)
     /// - Returns: Result containing calculation result or error
     
     func calculate(from input: String, noteType: NoteType) -> Result<CalculationResult, CalculationError> {
-        // Parse the input
-        let components = input.trimmingCharacters(in: .whitespaces).components(separatedBy: "-")
-        guard components.count == 2 else {
+        // Parse the input - handle both "-" and " to " as separators using regex
+        let trimmedInput = input.trimmingCharacters(in: .whitespaces)
+
+        // Use regex to split on either "-" or " to " (case insensitive)
+        // Pattern: either a dash, or the word "to" surrounded by spaces
+        let pattern = "\\s+to\\s+|-"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
             return .failure(.invalidFormat)
         }
-        
-        let startTimeString = components[0].trimmingCharacters(in: .whitespaces)
-        let endTimeString = components[1].trimmingCharacters(in: .whitespaces)
+
+        let matches = regex.matches(in: trimmedInput, range: NSRange(trimmedInput.startIndex..., in: trimmedInput))
+
+        guard matches.count == 1 else {
+            return .failure(.invalidFormat)
+        }
+
+        let match = matches[0]
+        let startTimeString = String(trimmedInput[..<Range(match.range, in: trimmedInput)!.lowerBound]).trimmingCharacters(in: .whitespaces)
+        let endTimeString = String(trimmedInput[Range(match.range, in: trimmedInput)!.upperBound...]).trimmingCharacters(in: .whitespaces)
         
         guard let startTime = parseTime(startTimeString),
               let endTime = parseTime(endTimeString) else {

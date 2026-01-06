@@ -73,7 +73,7 @@ struct ContentView: View {
                     Text("Enter time range (24h or 12h format):")
                         .font(.headline)
                     
-                           TextField("e.g., 09:00-10:30, 0900-1030, or 9:00 AM-10:30 AM", text: $timeInput)
+                           TextField("e.g., 09:00-10:30, 09:00 to 10:30, or 9:00 AM to 10:30 AM", text: $timeInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .onSubmit {
@@ -107,6 +107,18 @@ struct ContentView: View {
                                 Text("Result:")
                                     .font(.headline)
                                 Spacer()
+                                Button(action: copyFullResult) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "doc.on.doc")
+                                        Text("Copy Full")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
                                 Button(action: copyResultNumber) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "doc.on.doc")
@@ -244,6 +256,8 @@ struct ContentView: View {
                 // Clear suggested time range when user declines the amendment
                 suggestedTimeRange = ""
                 showResult()
+                // Check for near tier warning after declining start time amendment
+                checkForNearTierWarning()
             }
         } message: {
             if case .startTimeNotOnHourOrHalfHour(let suggestedStartTime) = startTimeWarning {
@@ -324,9 +338,35 @@ struct ContentView: View {
     
     private func showResult() {
         guard let calcResult = currentCalculationResult else { return }
-        result = "\(calcResult.calls) calls"
+        result = "\(calcResult.startTime.formattedString)-\(calcResult.endTime.formattedString), \(calcResult.calls) calls"
+
+        // Automatically copy result to clipboard
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(result, forType: .string)
     }
-    
+
+    private func checkForNearTierWarning() {
+        guard let calcResult = currentCalculationResult else { return }
+
+        // Find near tier warning
+        if let nearTierWarning = calcResult.warnings.first(where: {
+            if case .nearNextTier = $0 { return true }
+            return false
+        }) {
+            // Set the warning first
+            self.nearTierWarning = nearTierWarning
+            // Extract suggested time range
+            if case .nearNextTier(_, _, _, let suggestedEndTime) = nearTierWarning {
+                self.suggestedTimeRange = "\(calcResult.startTime.formattedString)-\(suggestedEndTime)"
+            }
+            // Use a small delay to ensure state is fully updated before showing alert
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.nearTierAlertDelay) {
+                self.showingNearTierAlert = true
+            }
+        }
+    }
+
     private func clearPreviousResults() {
         // Clear all previous calculation results when note type changes
         result = ""
@@ -340,6 +380,12 @@ struct ContentView: View {
         preserveSuggestedRange = false
     }
     
+    private func copyFullResult() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(result, forType: .string)
+    }
+
     private func copyResultNumber() {
         guard let calcResult = currentCalculationResult else { return }
         let numberString = "\(calcResult.calls)"
@@ -358,11 +404,16 @@ struct ContentView: View {
         guard let calcResult = currentCalculationResult else { return }
         let amendedRange = "\(calcResult.startTime.formattedString)-\(suggestedEndTime)"
         timeInput = amendedRange
-        
+
+        // Copy amended range to clipboard
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(amendedRange, forType: .string)
+
         // Set the suggested time range to the amended range and preserve it
         suggestedTimeRange = amendedRange
         preserveSuggestedRange = true
-        
+
         // Recalculate with amended time
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.recalculateDelay) {
             calculateCalls()
@@ -375,11 +426,16 @@ struct ContentView: View {
         guard let calcResult = currentCalculationResult else { return }
         let amendedRange = "\(suggestedStartTime)-\(calcResult.endTime.formattedString)"
         timeInput = amendedRange
-        
+
+        // Copy amended range to clipboard
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(amendedRange, forType: .string)
+
         // Set the suggested time range to the amended range and preserve it
         suggestedTimeRange = amendedRange
         preserveSuggestedRange = true
-        
+
         // Recalculate with amended time
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.recalculateDelay) {
             calculateCalls()
