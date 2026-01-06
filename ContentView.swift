@@ -3,15 +3,22 @@ import AppKit
 
 struct ContentView: View {
     // MARK: - Constants
-    
+
     /// Delay before showing start time alert (allows state to update)
     private static let startTimeAlertDelay: TimeInterval = 0.01
-    
+
     /// Delay before showing near tier alert (allows state to update)
     private static let nearTierAlertDelay: TimeInterval = 0.1
-    
+
     /// Delay before recalculating after amending time
     private static let recalculateDelay: TimeInterval = 0.1
+
+    /// Cached date formatter for timer timestamps (performance optimization)
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
     
     // MARK: - State
 
@@ -366,9 +373,16 @@ struct ContentView: View {
         result = "\(calcResult.startTime.formattedString)-\(calcResult.endTime.formattedString), \(calcResult.calls) calls"
 
         // Automatically copy result to clipboard
+        copyToClipboard(result)
+    }
+
+    // MARK: - Helper Methods
+
+    /// Copies text to the system clipboard
+    private func copyToClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(result, forType: .string)
+        pasteboard.setString(text, forType: .string)
     }
 
     private func checkForNearTierWarning() {
@@ -407,23 +421,17 @@ struct ContentView: View {
     }
     
     private func copyFullResult() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(result, forType: .string)
+        copyToClipboard(result)
     }
 
     private func copyResultNumber() {
         guard let calcResult = currentCalculationResult else { return }
         let numberString = "\(calcResult.calls)"
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(numberString, forType: .string)
+        copyToClipboard(numberString)
     }
-    
+
     private func copySuggestedTimeRange() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(suggestedTimeRange, forType: .string)
+        copyToClipboard(suggestedTimeRange)
     }
     
     private func amendTimeForNextTier(suggestedEndTime: String) {
@@ -432,9 +440,7 @@ struct ContentView: View {
         timeInput = amendedRange
 
         // Copy amended range to clipboard
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(amendedRange, forType: .string)
+        copyToClipboard(amendedRange)
 
         // Set the suggested time range to the amended range and preserve it
         suggestedTimeRange = amendedRange
@@ -447,16 +453,14 @@ struct ContentView: View {
             self.suggestedTimeRange = self.timeInput
         }
     }
-    
+
     private func amendStartTime(suggestedStartTime: String) {
         guard let calcResult = currentCalculationResult else { return }
         let amendedRange = "\(suggestedStartTime)-\(calcResult.endTime.formattedString)"
         timeInput = amendedRange
 
         // Copy amended range to clipboard
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(amendedRange, forType: .string)
+        copyToClipboard(amendedRange)
 
         // Set the suggested time range to the amended range and preserve it
         suggestedTimeRange = amendedRange
@@ -476,12 +480,9 @@ struct ContentView: View {
             guard let startTime = timerStartTime else { return }
             let endTime = Date()
 
-            // Format times as HH:MM
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-
-            let startString = formatter.string(from: startTime)
-            let endString = formatter.string(from: endTime)
+            // Format times as HH:MM using cached formatter
+            let startString = Self.timeFormatter.string(from: startTime)
+            let endString = Self.timeFormatter.string(from: endTime)
 
             timeInput = "\(startString)-\(endString)"
 
