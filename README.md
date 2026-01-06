@@ -1,6 +1,6 @@
 # Billing Time Calculator
 
-A macOS GUI application that calculates billing calls based on time ranges.
+A macOS GUI application that calculates billing calls based on time ranges.  This grew out of hectic work days when there wasn't always time to complete documentation right away, so I would at times have to finish up that part of the work at end of day.  This simplifies the process as intended by the billing policies in my provence by billing for the face to face time plus the allowed time for all other matters.  This way the billing gets done reliably in the moment, obviating a dual-reminder system (billing then documentation) I'd been running previously.
 
 ## Features
 
